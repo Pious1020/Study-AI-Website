@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { GraduationCap, LogOut, LogIn, Loader2 } from 'lucide-react';
+import { GraduationCap, LogOut, LogIn, Settings } from 'lucide-react';
 import { useAuth0 } from '@auth0/auth0-react';
+import Avatar from './Avatar';
 
 export default function Header() {
   const location = useLocation();
@@ -56,21 +57,26 @@ export default function Header() {
               )}
               {isLoading ? (
                 <div className="flex items-center space-x-2 text-apple-gray-400">
-                  <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-sm">Loading...</span>
                 </div>
               ) : isAuthenticated ? (
                 <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2">
-                    {user?.picture && (
-                      <img
-                        src={user.picture}
-                        alt={user.name || 'User'}
-                        className="h-8 w-8 rounded-full"
-                      />
-                    )}
-                    <span className="text-sm text-apple-gray-600">{user?.name}</span>
-                  </div>
+                  <Link to="/account" className="flex items-center space-x-2 group">
+                    <Avatar src={user?.picture} name={user?.name} size="sm" />
+                    <span className="text-sm text-apple-gray-600 group-hover:text-apple-gray-900">
+                      {user?.name}
+                    </span>
+                  </Link>
+                  <Link
+                    to="/account"
+                    className={`transition-colors duration-200 ${
+                      isActive('/account')
+                        ? 'text-apple-blue'
+                        : 'text-apple-gray-400 hover:text-apple-gray-500'
+                    }`}
+                  >
+                    <Settings className="h-5 w-5" />
+                  </Link>
                   <button
                     onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
                     className="flex items-center space-x-1 text-sm text-apple-gray-400 hover:text-apple-gray-500"
@@ -85,7 +91,7 @@ export default function Header() {
                   className="flex items-center space-x-1 text-sm text-apple-gray-400 hover:text-apple-gray-500"
                 >
                   <LogIn className="h-4 w-4" />
-                  <span>Login</span>
+                  <span>Sign In</span>
                 </button>
               )}
             </div>

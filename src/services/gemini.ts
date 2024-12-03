@@ -26,6 +26,7 @@ interface QuizResponse {
     question: string;
     options: string[];
     correctAnswer: number;
+    explanation: string;
   }[];
 }
 
@@ -37,7 +38,7 @@ export async function generateFlashcards(formData: FormData) {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
     
-    const prompt = `Generate 5 comprehensive flashcards for studying ${formData.topic} in ${formData.subject} at a ${formData.difficulty} level.
+    const prompt = `Generate ${formData.numberOfQuestions} comprehensive flashcards for studying ${formData.topic} in ${formData.subject} at a ${formData.difficulty} level.
     ${formData.additionalInfo ? `Additional context: ${formData.additionalInfo}` : ''}
     
     Return ONLY a JSON object in this exact format without any markdown:
@@ -76,7 +77,8 @@ export async function generateQuiz(formData: FormData) {
     const prompt = `Create a challenging quiz about ${formData.topic} in ${formData.subject} at a ${formData.difficulty} level.
     ${formData.additionalInfo ? `Additional context: ${formData.additionalInfo}` : ''}
     
-    Create ${formData.numberOfQuestions} multiple choice questions that test deep understanding. Return ONLY a JSON object in this exact format without any markdown:
+    Create ${formData.numberOfQuestions} multiple choice questions that test deep understanding. The questions should be related to the flashcards and cover similar concepts.
+    Return ONLY a JSON object in this exact format without any markdown:
     {
       "questions": [
         {

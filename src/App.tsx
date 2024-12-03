@@ -7,6 +7,7 @@ import Library from './components/Library';
 import Home from './components/Home';
 import AuthProvider from './providers/AuthProvider';
 import ProtectedRoute from './components/ProtectedRoute';
+import AccountSettings from './components/AccountSettings';
 
 export default function App() {
   return (
@@ -22,14 +23,11 @@ export default function App() {
                   <CreateStudySet />
                 </ProtectedRoute>
               } />
-              <Route path="/library" element={
+              <Route path="/library" element={<Library />} />
+              <Route path="/study/:id" element={<StudySetView />} />
+              <Route path="/account" element={
                 <ProtectedRoute>
-                  <Library />
-                </ProtectedRoute>
-              } />
-              <Route path="/study/:id" element={
-                <ProtectedRoute>
-                  <StudySetView />
+                  <AccountSettings />
                 </ProtectedRoute>
               } />
             </Routes>
