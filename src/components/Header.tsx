@@ -1,8 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, LogOut, LogIn, Loader2 } from 'lucide-react';
+import { useAuth0 } from '@auth0/auth0-react';
 
 export default function Header() {
   const location = useLocation();
+  const { isAuthenticated, isLoading, loginWithRedirect, logout, user } = useAuth0();
   
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -44,12 +46,48 @@ export default function Header() {
               >
                 Library
               </Link>
-              <Link
-                to="/create"
-                className="apple-button text-sm px-5 py-2.5"
-              >
-                Create Set
-              </Link>
+              {isAuthenticated && (
+                <Link
+                  to="/create"
+                  className="apple-button text-sm px-5 py-2.5"
+                >
+                  Create Set
+                </Link>
+              )}
+              {isLoading ? (
+                <div className="flex items-center space-x-2 text-apple-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading...</span>
+                </div>
+              ) : isAuthenticated ? (
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    {user?.picture && (
+                      <img
+                        src={user.picture}
+                        alt={user.name || 'User'}
+                        className="h-8 w-8 rounded-full"
+                      />
+                    )}
+                    <span className="text-sm text-apple-gray-600">{user?.name}</span>
+                  </div>
+                  <button
+                    onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                    className="flex items-center space-x-1 text-sm text-apple-gray-400 hover:text-apple-gray-500"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => loginWithRedirect()}
+                  className="flex items-center space-x-1 text-sm text-apple-gray-400 hover:text-apple-gray-500"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span>Login</span>
+                </button>
+              )}
             </div>
           </div>
         </nav>
