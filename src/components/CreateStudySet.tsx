@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, GraduationCap, Book, Brain, Sparkles } from 'lucide-react';
+import { Loader2, GraduationCap, Book, Brain, Sparkles, FileText } from 'lucide-react';
 import { generateFlashcards, generateQuiz } from '../services/gemini';
 import { useStudyStore } from '../store/studyStore';
 import ErrorMessage from './ErrorMessage';
+import { StudySet } from '../types';
 
 interface FormData {
   topic: string;
@@ -11,6 +12,7 @@ interface FormData {
   difficulty: string;
   additionalInfo: string;
   numberOfQuestions: number;
+  description: string;
 }
 
 export default function CreateStudySet() {
@@ -20,6 +22,7 @@ export default function CreateStudySet() {
     difficulty: 'intermediate',
     additionalInfo: '',
     numberOfQuestions: 10,
+    description: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +47,15 @@ export default function CreateStudySet() {
         generateQuiz(formData)
       ]);
 
-      const studySet = {
+      const studySet: StudySet = {
         id: `set-${Date.now()}`,
         title: `${formData.subject}: ${formData.topic}`,
-        topic: formData.topic,
-        subject: formData.subject,
-        difficulty: formData.difficulty,
+        description: formData.description || `A study set about ${formData.topic} in ${formData.subject} at ${formData.difficulty} level.`,
         flashcards,
-        quiz
+        quiz: {
+          ...quiz,
+          title: `${formData.subject}: ${formData.topic} Quiz`,
+        },
       };
 
       addStudySet(studySet);
@@ -102,7 +106,7 @@ export default function CreateStudySet() {
             {/* Subject Input */}
             <div className="space-y-2">
               <label htmlFor="subject" className="block text-sm font-medium text-apple-gray-500">
-                Subject Area
+                Subject
               </label>
               <div className="relative">
                 <input
@@ -116,6 +120,24 @@ export default function CreateStudySet() {
                   required
                 />
                 <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-gray-300" />
+              </div>
+            </div>
+
+            {/* Description Input */}
+            <div className="space-y-2">
+              <label htmlFor="description" className="block text-sm font-medium text-apple-gray-500">
+                Description
+              </label>
+              <div className="relative">
+                <textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  className="apple-input pl-10 min-h-[100px]"
+                  placeholder="Add a description for your study set..."
+                />
+                <FileText className="absolute left-3 top-4 h-5 w-5 text-apple-gray-300" />
               </div>
             </div>
 
@@ -162,36 +184,31 @@ export default function CreateStudySet() {
             {/* Additional Information */}
             <div className="space-y-2">
               <label htmlFor="additionalInfo" className="block text-sm font-medium text-apple-gray-500">
-                Additional Information
+                Additional Information (Optional)
               </label>
-              <div className="relative">
-                <textarea
-                  id="additionalInfo"
-                  name="additionalInfo"
-                  value={formData.additionalInfo}
-                  onChange={handleInputChange}
-                  className="apple-input min-h-[100px] pl-10"
-                  placeholder="Any specific aspects you'd like to focus on?"
-                />
-                <Sparkles className="absolute left-3 top-4 h-5 w-5 text-apple-gray-300" />
-              </div>
+              <textarea
+                id="additionalInfo"
+                name="additionalInfo"
+                value={formData.additionalInfo}
+                onChange={handleInputChange}
+                className="apple-input"
+                placeholder="Add any specific topics or areas you'd like to focus on..."
+                rows={4}
+              />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="apple-button w-full flex items-center justify-center space-x-2"
+              className="w-full apple-button flex items-center justify-center"
             >
               {loading ? (
                 <>
-                  <Loader2 className="animate-spin h-5 w-5" />
-                  <span>Generating Study Materials...</span>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Generating Study Set...
                 </>
               ) : (
-                <>
-                  <Sparkles className="h-5 w-5" />
-                  <span>Generate Study Materials</span>
-                </>
+                'Create Study Set'
               )}
             </button>
           </form>
