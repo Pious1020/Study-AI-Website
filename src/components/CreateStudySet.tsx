@@ -57,7 +57,7 @@ export default function CreateStudySet() {
 
       // Create the study deck document in Firestore
       const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
-        userId: user.sub,
+        userId: user.sub, // Store the full Auth0 user ID
         title: formData.topic,
         description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
         subject: formData.subject,
