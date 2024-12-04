@@ -1,8 +1,33 @@
-import { Auth0Provider } from '@auth0/auth0-react';
+import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { signInWithCustomToken } from 'firebase/auth';
+import { auth } from '../services/firebase';
 
 interface AuthProviderProps {
   children: React.ReactNode;
+}
+
+function AuthStateManager({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, getIdTokenClaims } = useAuth0();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      (async () => {
+        try {
+          const claims = await getIdTokenClaims();
+          if (claims) {
+            // Use the ID token as a custom token for Firebase
+            await signInWithCustomToken(auth, claims.__raw);
+          }
+        } catch (error) {
+          console.error('Error signing in to Firebase:', error);
+        }
+      })();
+    }
+  }, [isAuthenticated, getIdTokenClaims]);
+
+  return <>{children}</>;
 }
 
 export default function AuthProvider({ children }: AuthProviderProps) {
@@ -27,8 +52,12 @@ export default function AuthProvider({ children }: AuthProviderProps) {
         redirect_uri: window.location.origin
       }}
       onRedirectCallback={onRedirectCallback}
+      useRefreshTokens={true}
+      cacheLocation="localstorage"
     >
-      {children}
+      <AuthStateManager>
+        {children}
+      </AuthStateManager>
     </Auth0Provider>
   );
 }

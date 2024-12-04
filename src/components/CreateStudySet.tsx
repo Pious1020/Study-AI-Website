@@ -7,6 +7,9 @@ import { db } from '../services/firebase';
 import { generateFlashcards, generateQuiz } from '../services/gemini';
 import ErrorMessage from './ErrorMessage';
 import { StudySet } from '../types';
+import { getAuth } from 'firebase/auth';
+
+const auth = getAuth();
 
 interface FormData {
   topic: string;
@@ -57,7 +60,7 @@ export default function CreateStudySet() {
 
       // Create the study deck document in Firestore
       const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
-        userId: user.sub,
+        userId: auth.currentUser?.uid,
         title: formData.topic,
         description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
         subject: formData.subject,
