@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import Header from './components/Header';
 import CreateStudySet from './components/CreateStudySet';
 import StudySetView from './components/StudySetView';
@@ -32,6 +33,7 @@ export default function App() {
               } />
             </Routes>
           </main>
+          <Analytics />
         </div>
       </AuthProvider>
     </Router>
