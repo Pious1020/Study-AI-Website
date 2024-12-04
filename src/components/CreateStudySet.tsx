@@ -18,7 +18,7 @@ interface FormData {
 }
 
 export default function CreateStudySet() {
-  const { user } = useAuth0();
+  const { user, isAuthenticated } = useAuth0();
   const [formData, setFormData] = useState<FormData>({
     topic: '',
     subject: '',
@@ -40,7 +40,7 @@ export default function CreateStudySet() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
+    if (!isAuthenticated || !user) {
       setError('You must be logged in to create a study set');
       return;
     }
@@ -57,7 +57,7 @@ export default function CreateStudySet() {
 
       // Create the study deck document in Firestore
       const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
-        userId: user.sub, // Store the full Auth0 user ID
+        userId: user.sub,
         title: formData.topic,
         description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
         subject: formData.subject,

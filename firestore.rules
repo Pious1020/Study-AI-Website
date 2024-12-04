@@ -3,31 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /studyDecks/{deckId} {
-      // Helper function to validate user
-      function isValidUser() {
-        return request.auth != null;
-      }
-      
-      // Helper function to check if user owns the document
-      function isOwner() {
-        return isValidUser() && 
-          (resource.data.userId == request.auth.uid || 
-           resource.data.userId == 'auth0|' + request.auth.uid);
-      }
-      
       // Allow anyone to read study decks
       allow read: if true;
       
-      // Allow authenticated users to create decks
-      allow create: if isValidUser();
-      
-      // Allow users to update and delete their own decks
-      allow update, delete: if isOwner();
-      
-      // Allow users to write to their own decks
-      allow write: if isValidUser() && 
-        (request.resource.data.userId == request.auth.uid || 
-         request.resource.data.userId == 'auth0|' + request.auth.uid);
+      // Allow authenticated users to create and manage their decks
+      allow create, update, delete: if request.auth != null && 
+        request.resource.data.userId == request.auth.token.sub;
     }
   }
 }
