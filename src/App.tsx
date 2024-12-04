@@ -14,7 +14,7 @@ export default function App() {
     <AuthProvider>
       <div className="min-h-screen bg-apple-gray-50">
         <Header />
-        <main className="pt-16"> 
+        <main className="pt-16">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/create" element={
@@ -29,6 +29,7 @@ export default function App() {
                 <AccountSettings />
               </ProtectedRoute>
             } />
+            <Route path="*" element={<Home />} />
           </Routes>
         </main>
         <Analytics />
