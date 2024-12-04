@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -12,10 +12,13 @@ interface StudyDeck {
   description: string;
   subject: string;
   flashcards: Array<{ question: string; answer: string }>;
-  quiz: Array<{ question: string; options: string[]; correctAnswer: string }>;
+  quiz: {
+    questions: Array<{ question: string; options: string[]; correctAnswer: string }>;
+  };
 }
 
 export default function Library() {
+  const navigate = useNavigate();
   const { user, isAuthenticated, loginWithRedirect } = useAuth0();
   const [decks, setDecks] = useState<StudyDeck[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,11 +38,26 @@ export default function Library() {
         );
         
         const querySnapshot = await getDocs(q);
-        const loadedDecks = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as StudyDeck[];
+        const loadedDecks = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          // Validate the data structure
+          if (!data.title || !data.description || !data.subject) {
+            console.error('Invalid deck data:', data);
+            return null;
+          }
+          return {
+            id: doc.id,
+            title: data.title,
+            description: data.description,
+            subject: data.subject,
+            flashcards: Array.isArray(data.flashcards) ? data.flashcards : [],
+            quiz: {
+              questions: Array.isArray(data.quiz?.questions) ? data.quiz.questions : []
+            }
+          };
+        }).filter((deck): deck is StudyDeck => deck !== null);
         
+        console.log('Loaded decks:', loadedDecks);
         setDecks(loadedDecks);
       } catch (err) {
         console.error('Error loading decks:', err);
@@ -68,6 +86,10 @@ export default function Library() {
       </div>
     );
   }
+
+  const handleDeckClick = (deckId: string) => {
+    navigate(`/deck/${deckId}`);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -107,8 +129,9 @@ export default function Library() {
               title={deck.title}
               description={deck.description}
               subject={deck.subject}
-              flashcardCount={deck.flashcards.length}
-              quizCount={deck.quiz.length}
+              flashcardCount={deck.flashcards?.length || 0}
+              quizCount={deck.quiz?.questions?.length || 0}
+              onClick={() => handleDeckClick(deck.id)}
             />
           ))}
         </div>

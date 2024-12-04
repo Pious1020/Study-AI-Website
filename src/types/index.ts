@@ -1,26 +1,33 @@
-export interface FlashCard {
-  id: string;
-  front: string;
-  back: string;
-}
+import { Timestamp, DocumentData } from 'firebase/firestore';
 
-export interface Quiz {
-  id: string;
-  title: string;
-  questions: QuizQuestion[];
+export interface Flashcard {
+  question: string;
+  answer: string;
 }
 
 export interface QuizQuestion {
-  id: string;
   question: string;
   options: string[];
   correctAnswer: number;
+  explanation: string;
 }
 
-export interface StudySet {
-  id: string;
+// The base study set without timestamps
+export interface StudySetContent {
+  userId: string;
   title: string;
   description: string;
-  flashcards: FlashCard[];
-  quiz: Quiz;
+  subject: string;
+  difficulty: string;
+  flashcards: Flashcard[];
+  quiz: {
+    questions: QuizQuestion[];
+  };
+}
+
+// The complete study set with timestamps for Firestore
+export interface StudySet extends StudySetContent, DocumentData {
+  id?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

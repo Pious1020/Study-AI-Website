@@ -2,33 +2,30 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Loader2, GraduationCap, Book, Brain, Sparkles, FileText } from 'lucide-react';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generateFlashcards, generateQuiz } from '../services/gemini';
 import ErrorMessage from './ErrorMessage';
-import { StudySet } from '../types';
-import { getAuth } from 'firebase/auth';
-
-const auth = getAuth();
+import { StudySet, Flashcard, QuizQuestion } from '../types/index';
 
 interface FormData {
   topic: string;
   subject: string;
   difficulty: string;
-  additionalInfo: string;
+  description?: string;
+  additionalInfo?: string;
   numberOfQuestions: number;
-  description: string;
 }
 
 export default function CreateStudySet() {
-  const { user, isAuthenticated } = useAuth0();
+  const { user, isAuthenticated, getAccessTokenSilently } = useAuth0();
   const [formData, setFormData] = useState<FormData>({
     topic: '',
     subject: '',
     difficulty: 'intermediate',
+    description: '',
     additionalInfo: '',
     numberOfQuestions: 10,
-    description: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,29 +49,77 @@ export default function CreateStudySet() {
     setError(null);
 
     try {
+      console.log('Starting study set creation...');
+      console.log('User:', user);
+      console.log('Form data:', formData);
+
       // Generate flashcards and quiz using AI
-      const [flashcards, quiz] = await Promise.all([
-        generateFlashcards(formData),
-        generateQuiz(formData)
-      ]);
+      console.log('Generating flashcards and quiz...');
+      let flashcards: Flashcard[] = [];
+      let quizQuestions: QuizQuestion[] = [];
+      
+      try {
+        const [generatedFlashcards, generatedQuizQuestions] = await Promise.all([
+          generateFlashcards(formData),
+          generateQuiz(formData)
+        ]);
+        console.log('Generated flashcards (raw):', flashcards);
+        console.log('Generated quiz (raw):', quizQuestions);
+      } catch (genError) {
+        console.error('Error generating content:', genError);
+        throw new Error('Failed to generate study content');
+      }
+
+      if (!Array.isArray(flashcards) || !Array.isArray(quizQuestions)) {
+        console.error('Invalid data structure:', { flashcards, quizQuestions });
+        throw new Error('Generated content has invalid structure');
+      }
 
       // Create the study deck document in Firestore
-      const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
-        userId: auth.currentUser?.uid,
-        title: formData.topic,
-        description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
-        subject: formData.subject,
-        difficulty: formData.difficulty,
-        flashcards,
-        quiz,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      console.log('Creating Firestore document...');
+      const userId = user.sub;
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+      console.log('Using userId:', userId);
 
+      const now = Timestamp.now();
+      
+      // First create the base study data
+      const studyContent = {
+        userId,
+        title: formData.topic || 'Untitled Study Set',
+        description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
+        subject: formData.subject || 'General',
+        difficulty: formData.difficulty || 'intermediate',
+        flashcards,
+        quiz: {
+          questions: quizQuestions
+        }
+      };
+
+      // Then create the final Firestore document data with timestamps
+      const studyDeckData: Omit<StudySet, 'id'> = {
+        ...studyContent,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      // Add the document to Firestore (it will generate the id automatically)
+      const studyDeckRef = await addDoc(collection(db, 'studyDecks'), studyDeckData);
+      console.log('Study deck created with ID:', studyDeckRef.id);
+      
       // Navigate to the library after successful creation
       navigate('/library');
     } catch (err) {
       console.error('Error creating study set:', err);
+      if (err instanceof Error) {
+        console.error('Error details:', {
+          message: err.message,
+          stack: err.stack,
+          name: err.name
+        });
+      }
       setError(err instanceof Error ? err.message : 'An error occurred while creating the study set');
     } finally {
       setLoading(false);

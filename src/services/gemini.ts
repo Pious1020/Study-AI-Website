@@ -13,14 +13,15 @@ interface FormData {
   topic: string;
   subject: string;
   difficulty: string;
-  additionalInfo: string;
+  additionalInfo?: string;
+  description?: string;
   numberOfQuestions: number;
 }
 
 interface FlashcardResponse {
   flashcards: Array<{
-    front: string;
-    back: string;
+    question: string;
+    answer: string;
   }>;
 }
 
@@ -43,11 +44,12 @@ export async function generateFlashcards(formData: FormData): Promise<Flashcard[
     
     const prompt = `Generate ${formData.numberOfQuestions} comprehensive flashcards for studying ${formData.topic} in ${formData.subject} at a ${formData.difficulty} level.
     ${formData.additionalInfo ? `Additional context: ${formData.additionalInfo}` : ''}
+    ${formData.description ? `Description: ${formData.description}` : ''}
     
     Return ONLY a JSON object in this exact format without any markdown:
     {
       "flashcards": [
-        { "front": "question/term", "back": "detailed answer/definition" }
+        { "question": "question/term", "answer": "detailed answer/definition" }
       ]
     }`;
 
@@ -59,8 +61,8 @@ export async function generateFlashcards(formData: FormData): Promise<Flashcard[
     try {
       const parsed = JSON.parse(cleanJson) as FlashcardResponse;
       return parsed.flashcards.map(card => ({
-        question: card.front,
-        answer: card.back
+        question: String(card.question || ''),
+        answer: String(card.answer || '')
       }));
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
@@ -79,6 +81,7 @@ export async function generateQuiz(formData: FormData): Promise<QuizQuestion[]> 
     
     const prompt = `Create a challenging quiz about ${formData.topic} in ${formData.subject} at a ${formData.difficulty} level.
     ${formData.additionalInfo ? `Additional context: ${formData.additionalInfo}` : ''}
+    ${formData.description ? `Description: ${formData.description}` : ''}
     
     Create ${formData.numberOfQuestions} multiple choice questions that test deep understanding. The questions should be related to the flashcards and cover similar concepts.
     Return ONLY a JSON object in this exact format without any markdown:
@@ -101,9 +104,10 @@ export async function generateQuiz(formData: FormData): Promise<QuizQuestion[]> 
     try {
       const parsed = JSON.parse(cleanJson) as QuizResponse;
       return parsed.questions.map(q => ({
-        question: q.question,
-        options: q.options,
-        correctAnswer: q.options[q.correctAnswer] // Convert index to actual answer
+        question: String(q.question || ''),
+        options: Array.isArray(q.options) ? q.options.map(String) : [],
+        correctAnswer: Number(q.correctAnswer) || 0,
+        explanation: String(q.explanation || '')
       }));
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
