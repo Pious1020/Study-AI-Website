@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import { Loader2, GraduationCap, Book, Brain, Sparkles, FileText } from 'lucide-react';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { generateFlashcards, generateQuiz } from '../services/gemini';
-import { useStudyStore } from '../store/studyStore';
 import ErrorMessage from './ErrorMessage';
 import { StudySet } from '../types';
 
@@ -16,6 +18,7 @@ interface FormData {
 }
 
 export default function CreateStudySet() {
+  const { user } = useAuth0();
   const [formData, setFormData] = useState<FormData>({
     topic: '',
     subject: '',
@@ -26,7 +29,6 @@ export default function CreateStudySet() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const addStudySet = useStudyStore((state) => state.addStudySet);
   const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -38,30 +40,39 @@ export default function CreateStudySet() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setError('You must be logged in to create a study set');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
 
     try {
+      // Generate flashcards and quiz using AI
       const [flashcards, quiz] = await Promise.all([
         generateFlashcards(formData),
         generateQuiz(formData)
       ]);
 
-      const studySet: StudySet = {
-        id: `set-${Date.now()}`,
-        title: `${formData.subject}: ${formData.topic}`,
-        description: formData.description || `A study set about ${formData.topic} in ${formData.subject} at ${formData.difficulty} level.`,
+      // Create the study deck document in Firestore
+      const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
+        userId: user.sub,
+        title: formData.topic,
+        description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
+        subject: formData.subject,
+        difficulty: formData.difficulty,
         flashcards,
-        quiz: {
-          ...quiz,
-          title: `${formData.subject}: ${formData.topic} Quiz`,
-        },
-      };
+        quiz,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
 
-      addStudySet(studySet);
-      navigate(`/study/${studySet.id}`);
+      // Navigate to the library after successful creation
+      navigate('/library');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      console.error('Error creating study set:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred while creating the study set');
     } finally {
       setLoading(false);
     }

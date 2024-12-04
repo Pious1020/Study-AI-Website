@@ -1,77 +1,114 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStudyStore } from '../store/studyStore';
-import StudySetCard from './StudySetCard';
-import { PlusCircle, LogIn } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
+import { Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import StudySetCard from './StudySetCard';
+
+interface StudyDeck {
+  id: string;
+  title: string;
+  description: string;
+  subject: string;
+  flashcards: Array<{ question: string; answer: string }>;
+  quiz: Array<{ question: string; options: string[]; correctAnswer: string }>;
+}
 
 export default function Library() {
-  const studySets = useStudyStore((state) => state.studySets);
-  const navigate = useNavigate();
-  const { isAuthenticated, loginWithRedirect } = useAuth0();
+  const { user, isAuthenticated, loginWithRedirect } = useAuth0();
+  const [decks, setDecks] = useState<StudyDeck[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-apple-gray-900">My Study Sets</h1>
-        {isAuthenticated ? (
-          <button
-            onClick={() => navigate('/create')}
-            className="apple-button inline-flex items-center"
-          >
-            <PlusCircle className="mr-2 h-5 w-5" />
-            Create New
-          </button>
-        ) : (
-          <button
-            onClick={() => loginWithRedirect()}
-            className="apple-button-secondary inline-flex items-center"
-          >
-            <LogIn className="mr-2 h-5 w-5" />
-            Sign in to Create
-          </button>
-        )}
-      </div>
+  useEffect(() => {
+    async function loadDecks() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       
-      {!isAuthenticated ? (
-        <div className="apple-card text-center py-12">
-          <LogIn className="h-12 w-12 text-apple-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-apple-gray-900 mb-2">
-            Sign in to Save Your Study Sets
-          </h2>
-          <p className="text-apple-gray-500 mb-6">
-            Create and save your study sets to access them anytime, anywhere.
-          </p>
+      try {
+        const q = query(
+          collection(db, 'studyDecks'),
+          where('userId', '==', user.sub)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        const loadedDecks = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as StudyDeck[];
+        
+        setDecks(loadedDecks);
+      } catch (err) {
+        console.error('Error loading decks:', err);
+        setError('Failed to load your study decks');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDecks();
+  }, [user]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-4">Your Study Library</h1>
+          <p className="text-gray-600 mb-6">Sign in to create and save your study sets</p>
           <button
             onClick={() => loginWithRedirect()}
-            className="apple-button"
+            className="bg-apple-blue text-white px-6 py-2 rounded-lg hover:bg-apple-blue/90 transition-colors"
           >
             Sign In
           </button>
         </div>
-      ) : studySets.length === 0 ? (
-        <div className="apple-card text-center py-12">
-          <PlusCircle className="h-12 w-12 text-apple-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-apple-gray-900 mb-2">
-            Create Your First Study Set
-          </h2>
-          <p className="text-apple-gray-500 mb-6">
-            Start by creating a new study set with flashcards and quizzes.
-          </p>
-          <button
-            onClick={() => navigate('/create')}
-            className="apple-button"
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Your Study Library</h1>
+        <Link
+          to="/create"
+          className="bg-apple-blue text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-apple-blue/90 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Create New Set
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-apple-blue mx-auto"></div>
+        </div>
+      ) : error ? (
+        <div className="text-red-500 text-center py-8">{error}</div>
+      ) : decks.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-gray-600 mb-4">You haven't created any study sets yet</p>
+          <Link
+            to="/create"
+            className="text-apple-blue hover:underline"
           >
-            Create Study Set
-          </button>
+            Create your first study set
+          </Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {studySets.map((studySet) => (
+          {decks.map((deck) => (
             <StudySetCard
-              key={studySet.id}
-              studySet={studySet}
-              onClick={() => navigate(`/study/${studySet.id}`)}
+              key={deck.id}
+              id={deck.id}
+              title={deck.title}
+              description={deck.description}
+              subject={deck.subject}
+              flashcardCount={deck.flashcards.length}
+              quizCount={deck.quiz.length}
             />
           ))}
         </div>

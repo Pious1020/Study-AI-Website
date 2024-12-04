@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Flashcard, QuizQuestion } from '../types';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -17,24 +18,26 @@ interface FormData {
 }
 
 interface FlashcardResponse {
-  front: string;
-  back: string;
+  flashcards: Array<{
+    front: string;
+    back: string;
+  }>;
 }
 
 interface QuizResponse {
-  questions: {
+  questions: Array<{
     question: string;
     options: string[];
     correctAnswer: number;
     explanation: string;
-  }[];
+  }>;
 }
 
 function cleanJsonResponse(text: string): string {
   return text.replace(/```(json|JSON)?\n?|\n?```/g, '').trim();
 }
 
-export async function generateFlashcards(formData: FormData) {
+export async function generateFlashcards(formData: FormData): Promise<Flashcard[]> {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
     
@@ -54,10 +57,10 @@ export async function generateFlashcards(formData: FormData) {
     const cleanJson = cleanJsonResponse(text);
     
     try {
-      const parsed = JSON.parse(cleanJson);
-      return parsed.flashcards.map((card: FlashcardResponse, index: number) => ({
-        id: `card-${index}`,
-        ...card
+      const parsed = JSON.parse(cleanJson) as FlashcardResponse;
+      return parsed.flashcards.map(card => ({
+        question: card.front,
+        answer: card.back
       }));
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
@@ -70,7 +73,7 @@ export async function generateFlashcards(formData: FormData) {
   }
 }
 
-export async function generateQuiz(formData: FormData) {
+export async function generateQuiz(formData: FormData): Promise<QuizQuestion[]> {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
     
@@ -96,16 +99,12 @@ export async function generateQuiz(formData: FormData) {
     const cleanJson = cleanJsonResponse(text);
     
     try {
-      const parsed = JSON.parse(cleanJson);
-      return {
-        id: `quiz-${Date.now()}`,
-        title: `${formData.subject}: ${formData.topic} Quiz`,
-        difficulty: formData.difficulty,
-        questions: parsed.questions.map((q: QuizResponse['questions'][0], index: number) => ({
-          id: `question-${index}`,
-          ...q
-        }))
-      };
+      const parsed = JSON.parse(cleanJson) as QuizResponse;
+      return parsed.questions.map(q => ({
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.options[q.correctAnswer] // Convert index to actual answer
+      }));
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
       console.error('Cleaned JSON string:', cleanJson);
