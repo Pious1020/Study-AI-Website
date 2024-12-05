@@ -4,25 +4,19 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /studyDecks/{deckId} {
       // Allow read if authenticated and the deck belongs to the user
-      allow read: if request.auth != null && 
-        (resource == null || resource.data.userId == request.auth.uid);
+      allow read: if request.auth != null;
       
       // Allow create if authenticated and the user is setting themselves as owner
       allow create: if request.auth != null && 
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.title is string &&
-        request.resource.data.description is string &&
-        request.resource.data.subject is string &&
-        request.resource.data.flashcards is list;
+                   request.resource.data.userId == request.auth.uid;
       
-      // Allow update if authenticated and user owns the deck
-      allow update: if request.auth != null &&
-        resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == request.auth.uid;
+      // Allow update if authenticated and the user owns the document
+      allow update: if request.auth != null && 
+                   resource.data.userId == request.auth.uid;
       
-      // Allow delete if authenticated and user owns the deck
-      allow delete: if request.auth != null &&
-        resource.data.userId == request.auth.uid;
+      // Allow delete if authenticated and the user owns the document
+      allow delete: if request.auth != null && 
+                   resource.data.userId == request.auth.uid;
     }
   }
 }

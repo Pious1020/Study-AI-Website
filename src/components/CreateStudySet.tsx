@@ -1,277 +1,270 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
-import { Loader2, GraduationCap, Book, Brain, Sparkles, FileText } from 'lucide-react';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import { generateFlashcards, generateQuiz } from '../services/gemini';
-import ErrorMessage from './ErrorMessage';
-import { StudySet, Flashcard, QuizQuestion } from '../types/index';
+import { addDoc, collection } from 'firebase/firestore';
+import { getFirebaseDb } from '../lib/firebase';
+import { useAuth } from '../providers/AuthProvider';
+import { generateFlashcards, generateTitle, generateQuizOptions } from '../services/gemini';
+import { Wand2 } from 'lucide-react';
 
 interface FormData {
-  topic: string;
+  title: string;
+  description: string;
   subject: string;
+  topic: string;
   difficulty: string;
-  description?: string;
-  additionalInfo?: string;
   numberOfQuestions: number;
+  additionalInfo?: string;
 }
 
 export default function CreateStudySet() {
-  const { user, isAuthenticated, getAccessTokenSilently } = useAuth0();
-  const [formData, setFormData] = useState<FormData>({
-    topic: '',
-    subject: '',
-    difficulty: 'intermediate',
-    description: '',
-    additionalInfo: '',
-    numberOfQuestions: 10,
-  });
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [formData, setFormData] = useState<FormData>({
+    title: '',
+    description: '',
+    subject: '',
+    topic: '',
+    difficulty: 'intermediate',
+    numberOfQuestions: 5,
+    additionalInfo: '',
+  });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.type === 'number' ? parseInt(e.target.value) : e.target.value
-    }));
+  const generateTitleHandler = async () => {
+    if (!formData.subject || !formData.topic) {
+      setError('Please enter subject and topic first');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const title = await generateTitle(formData.subject, formData.topic);
+      setFormData(prev => ({ ...prev, title }));
+      setError(null);
+    } catch (error) {
+      console.error('Error generating title:', error);
+      setError('Failed to generate title. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAuthenticated || !user) {
+    
+    if (!currentUser) {
       setError('You must be logged in to create a study set');
       return;
     }
-    
+
+    if (!formData.title || !formData.subject || !formData.topic) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (loading) {
+      return; // Prevent multiple submissions
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      console.log('Starting study set creation...');
-      console.log('User:', user);
-      console.log('Form data:', formData);
-
-      // Generate flashcards and quiz using AI
-      console.log('Generating flashcards and quiz...');
-      let flashcards: Flashcard[] = [];
-      let quizQuestions: QuizQuestion[] = [];
+      // First generate flashcards
+      const flashcards = await generateFlashcards(formData);
       
-      try {
-        const [generatedFlashcards, generatedQuizQuestions] = await Promise.all([
-          generateFlashcards(formData),
-          generateQuiz(formData)
-        ]);
-        console.log('Generated flashcards (raw):', flashcards);
-        console.log('Generated quiz (raw):', quizQuestions);
-      } catch (genError) {
-        console.error('Error generating content:', genError);
-        throw new Error('Failed to generate study content');
-      }
+      // Then generate quiz questions with options
+      const quizQuestions = await Promise.all(
+        flashcards.map(async card => {
+          const options = await generateQuizOptions(card.question, card.answer);
+          return {
+            question: card.question,
+            options,
+            correctAnswer: card.answer,
+            explanation: `The correct answer is: ${card.answer}`
+          };
+        })
+      );
 
-      if (!Array.isArray(flashcards) || !Array.isArray(quizQuestions)) {
-        console.error('Invalid data structure:', { flashcards, quizQuestions });
-        throw new Error('Generated content has invalid structure');
-      }
-
-      // Create the study deck document in Firestore
-      console.log('Creating Firestore document...');
-      const userId = user.sub;
-      if (!userId) {
-        throw new Error('User ID not found');
-      }
-      console.log('Using userId:', userId);
-
-      const now = Timestamp.now();
-      
-      // First create the base study data
-      const studyContent = {
-        userId,
-        title: formData.topic || 'Untitled Study Set',
-        description: formData.description || `A study set about ${formData.topic} in ${formData.subject}`,
-        subject: formData.subject || 'General',
-        difficulty: formData.difficulty || 'intermediate',
+      // Finally, save everything to Firestore
+      const db = getFirebaseDb();
+      const studyDeckRef = await addDoc(collection(db, 'studyDecks'), {
+        ...formData,
+        userId: currentUser.uid,
+        createdAt: new Date().toISOString(),
         flashcards,
         quiz: {
-          questions: quizQuestions
-        }
-      };
+          questions: quizQuestions,
+        },
+      });
 
-      // Then create the final Firestore document data with timestamps
-      const studyDeckData: Omit<StudySet, 'id'> = {
-        ...studyContent,
-        createdAt: now,
-        updatedAt: now
-      };
-
-      // Add the document to Firestore (it will generate the id automatically)
-      const studyDeckRef = await addDoc(collection(db, 'studyDecks'), studyDeckData);
-      console.log('Study deck created with ID:', studyDeckRef.id);
-      
-      // Navigate to the library after successful creation
-      navigate('/library');
+      // Navigate only after everything is saved
+      navigate(`/study/${studyDeckRef.id}`);
     } catch (err) {
       console.error('Error creating study set:', err);
-      if (err instanceof Error) {
-        console.error('Error details:', {
-          message: err.message,
-          stack: err.stack,
-          name: err.name
-        });
-      }
-      setError(err instanceof Error ? err.message : 'An error occurred while creating the study set');
+      setError('Failed to create study set. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-apple-gray-50 py-12">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="apple-card space-y-8">
-          {/* Header */}
-          <div className="text-center">
-            <GraduationCap className="h-12 w-12 text-apple-blue mx-auto mb-4" />
-            <h1 className="apple-heading text-3xl mb-2">Create Study Set</h1>
-            <p className="apple-subheading">
-              Let AI craft the perfect study materials for you
-            </p>
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <div className="apple-card">
+        <h1 className="text-3xl font-semibold mb-8 text-center">Create Study Set</h1>
+        
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+            {error}
           </div>
+        )}
 
-          {error && <ErrorMessage message={error} />}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Topic Input */}
-            <div className="space-y-2">
-              <label htmlFor="topic" className="block text-sm font-medium text-apple-gray-500">
-                What would you like to learn about?
-              </label>
-              <div className="relative">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex gap-4 items-end">
+              <div className="flex-grow">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title
+                </label>
                 <input
                   type="text"
-                  id="topic"
-                  name="topic"
-                  value={formData.topic}
-                  onChange={handleInputChange}
-                  className="apple-input pl-10"
-                  placeholder="e.g., Photosynthesis"
+                  value={formData.title}
+                  onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                  placeholder="Enter a title for your study set"
                   required
                 />
-                <Book className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-gray-300" />
               </div>
+              <button
+                type="button"
+                onClick={generateTitleHandler}
+                disabled={loading}
+                className="apple-button-secondary flex items-center gap-2 h-[42px]"
+              >
+                {loading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                ) : (
+                  <Wand2 className="w-4 h-4" />
+                )}
+                Generate
+              </button>
             </div>
 
-            {/* Subject Input */}
-            <div className="space-y-2">
-              <label htmlFor="subject" className="block text-sm font-medium text-apple-gray-500">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Subject
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="subject"
-                  name="subject"
-                  value={formData.subject}
-                  onChange={handleInputChange}
-                  className="apple-input pl-10"
-                  placeholder="e.g., Biology"
-                  required
-                />
-                <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-gray-300" />
-              </div>
-            </div>
-
-            {/* Description Input */}
-            <div className="space-y-2">
-              <label htmlFor="description" className="block text-sm font-medium text-apple-gray-500">
-                Description
-              </label>
-              <div className="relative">
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="apple-input pl-10 min-h-[100px]"
-                  placeholder="Add a description for your study set..."
-                />
-                <FileText className="absolute left-3 top-4 h-5 w-5 text-apple-gray-300" />
-              </div>
-            </div>
-
-            {/* Difficulty Select */}
-            <div className="space-y-2">
-              <label htmlFor="difficulty" className="block text-sm font-medium text-apple-gray-500">
-                Difficulty Level
-              </label>
-              <select
-                id="difficulty"
-                name="difficulty"
-                value={formData.difficulty}
-                onChange={handleInputChange}
-                className="apple-input"
+              <input
+                type="text"
+                value={formData.subject}
+                onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                placeholder="e.g., Mathematics, History, Science"
                 required
-              >
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </div>
-
-            {/* Number of Questions Input */}
-            <div className="space-y-2">
-              <label htmlFor="numberOfQuestions" className="block text-sm font-medium text-apple-gray-500">
-                Number of Questions
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  id="numberOfQuestions"
-                  name="numberOfQuestions"
-                  value={formData.numberOfQuestions}
-                  onChange={handleInputChange}
-                  className="apple-input pl-10"
-                  min="5"
-                  max="100"
-                  required
-                />
-                <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-gray-300" />
-              </div>
-            </div>
-
-            {/* Additional Information */}
-            <div className="space-y-2">
-              <label htmlFor="additionalInfo" className="block text-sm font-medium text-apple-gray-500">
-                Additional Information (Optional)
-              </label>
-              <textarea
-                id="additionalInfo"
-                name="additionalInfo"
-                value={formData.additionalInfo}
-                onChange={handleInputChange}
-                className="apple-input"
-                placeholder="Add any specific topics or areas you'd like to focus on..."
-                rows={4}
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Topic
+              </label>
+              <input
+                type="text"
+                value={formData.topic}
+                onChange={e => setFormData(prev => ({ ...prev, topic: e.target.value }))}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                placeholder="e.g., Calculus, World War II, Chemistry"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                placeholder="Describe what this study set covers"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Difficulty Level
+                </label>
+                <select
+                  value={formData.difficulty}
+                  onChange={e => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                >
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Number of Questions
+                </label>
+                <select
+                  value={formData.numberOfQuestions}
+                  onChange={e => setFormData(prev => ({ ...prev, numberOfQuestions: Number(e.target.value) }))}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                >
+                  {[5, 10, 15, 20].map(num => (
+                    <option key={num} value={num}>
+                      {num} questions
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Additional Information (Optional)
+              </label>
+              <textarea
+                value={formData.additionalInfo}
+                onChange={e => setFormData(prev => ({ ...prev, additionalInfo: e.target.value }))}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-shadow"
+                placeholder="Any specific areas to focus on or additional context"
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-4">
+            <button
+              type="button"
+              onClick={() => navigate('/library')}
+              className="apple-button-secondary"
+              disabled={loading}
+            >
+              Cancel
+            </button>
             <button
               type="submit"
-              disabled={loading}
-              className="w-full apple-button flex items-center justify-center"
+              disabled={loading || !formData.title || !formData.subject || !formData.topic}
+              className={`apple-button ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Generating Study Set...
-                </>
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Creating...
+                </div>
               ) : (
                 'Create Study Set'
               )}
             </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </div>
   );

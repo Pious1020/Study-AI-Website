@@ -1,5 +1,6 @@
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { getFirebaseDb } from '../lib/firebase';
+import { Timestamp } from 'firebase/firestore';
 
 export interface StudyDeck {
   id?: string;
@@ -16,8 +17,8 @@ export interface StudyDeck {
     options: string[];
     correctAnswer: string;
   }>;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 const COLLECTION_NAME = 'studyDecks';
@@ -25,12 +26,14 @@ const COLLECTION_NAME = 'studyDecks';
 export const studyDeckService = {
   async createDeck(deck: Omit<StudyDeck, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+      const db = getFirebaseDb();
+      const deckWithTimestamps = {
         ...deck,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      return docRef.id;
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), deckWithTimestamps);
+      return { ...deckWithTimestamps, id: docRef.id };
     } catch (error) {
       console.error('Error creating deck:', error);
       throw error;
@@ -39,6 +42,7 @@ export const studyDeckService = {
 
   async getUserDecks(userId: string) {
     try {
+      const db = getFirebaseDb();
       const q = query(
         collection(db, COLLECTION_NAME),
         where('userId', '==', userId)
@@ -56,12 +60,18 @@ export const studyDeckService = {
 
   async getDeck(deckId: string) {
     try {
+      const db = getFirebaseDb();
       const docRef = doc(db, COLLECTION_NAME, deckId);
       const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as StudyDeck;
+      
+      if (!docSnap.exists()) {
+        throw new Error('Study deck not found');
       }
-      return null;
+      
+      return {
+        id: docSnap.id,
+        ...docSnap.data()
+      } as StudyDeck;
     } catch (error) {
       console.error('Error getting deck:', error);
       throw error;
@@ -70,11 +80,13 @@ export const studyDeckService = {
 
   async updateDeck(deckId: string, updates: Partial<StudyDeck>) {
     try {
+      const db = getFirebaseDb();
       const docRef = doc(db, COLLECTION_NAME, deckId);
       await updateDoc(docRef, {
         ...updates,
-        updatedAt: new Date()
+        updatedAt: Timestamp.now()
       });
+      return this.getDeck(deckId);
     } catch (error) {
       console.error('Error updating deck:', error);
       throw error;
@@ -83,7 +95,9 @@ export const studyDeckService = {
 
   async deleteDeck(deckId: string) {
     try {
-      await deleteDoc(doc(db, COLLECTION_NAME, deckId));
+      const db = getFirebaseDb();
+      const docRef = doc(db, COLLECTION_NAME, deckId);
+      await deleteDoc(docRef);
     } catch (error) {
       console.error('Error deleting deck:', error);
       throw error;

@@ -1,138 +1,122 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import StudySetCard from './StudySetCard';
-
-interface StudyDeck {
-  id: string;
-  title: string;
-  description: string;
-  subject: string;
-  flashcards: Array<{ question: string; answer: string }>;
-  quiz: {
-    questions: Array<{ question: string; options: string[]; correctAnswer: string }>;
-  };
-}
+import { getFirebaseDb } from '../lib/firebase';
+import { useAuth } from '../providers/AuthProvider';
+import { StudySet } from '../types';
+import { Loader2, Plus } from 'lucide-react';
 
 export default function Library() {
-  const navigate = useNavigate();
-  const { user, isAuthenticated, loginWithRedirect } = useAuth0();
-  const [decks, setDecks] = useState<StudyDeck[]>([]);
+  const [studyDecks, setStudyDecks] = useState<StudySet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
-    async function loadDecks() {
-      if (!user) {
+    async function fetchStudyDecks() {
+      if (!currentUser) {
+        setStudyDecks([]);
         setLoading(false);
         return;
       }
-      
+
       try {
+        const db = getFirebaseDb();
         const q = query(
           collection(db, 'studyDecks'),
-          where('userId', '==', user.sub)
+          where('userId', '==', currentUser.uid)
         );
-        
+
         const querySnapshot = await getDocs(q);
-        const loadedDecks = querySnapshot.docs.map(doc => {
-          const data = doc.data();
-          // Validate the data structure
-          if (!data.title || !data.description || !data.subject) {
-            console.error('Invalid deck data:', data);
-            return null;
-          }
-          return {
-            id: doc.id,
-            title: data.title,
-            description: data.description,
-            subject: data.subject,
-            flashcards: Array.isArray(data.flashcards) ? data.flashcards : [],
-            quiz: {
-              questions: Array.isArray(data.quiz?.questions) ? data.quiz.questions : []
-            }
-          };
-        }).filter((deck): deck is StudyDeck => deck !== null);
-        
-        console.log('Loaded decks:', loadedDecks);
-        setDecks(loadedDecks);
+        const decks = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as StudySet[];
+
+        setStudyDecks(decks);
       } catch (err) {
-        console.error('Error loading decks:', err);
+        console.error('Error fetching study decks:', err);
         setError('Failed to load your study decks');
       } finally {
         setLoading(false);
       }
     }
 
-    loadDecks();
-  }, [user]);
+    fetchStudyDecks();
+  }, [currentUser]);
 
-  if (!isAuthenticated) {
+  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-4">Your Study Library</h1>
-          <p className="text-gray-600 mb-6">Sign in to create and save your study sets</p>
-          <button
-            onClick={() => loginWithRedirect()}
-            className="bg-apple-blue text-white px-6 py-2 rounded-lg hover:bg-apple-blue/90 transition-colors"
-          >
-            Sign In
-          </button>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
 
-  const handleDeckClick = (deckId: string) => {
-    navigate(`/deck/${deckId}`);
-  };
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Your Study Library</h1>
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-red-600 mb-4">{error}</div>
         <Link
           to="/create"
-          className="bg-apple-blue text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-apple-blue/90 transition-colors"
+          className="text-blue-600 hover:text-blue-700 font-medium"
         >
-          <Plus className="w-5 h-5" />
-          Create New Set
+          Try creating a new study deck
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">My Study Decks</h1>
+        <Link
+          to="/create"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <Plus className="h-5 w-5 mr-2" />
+          Create New Deck
         </Link>
       </div>
 
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-apple-blue mx-auto"></div>
-        </div>
-      ) : error ? (
-        <div className="text-red-500 text-center py-8">{error}</div>
-      ) : decks.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-600 mb-4">You haven't created any study sets yet</p>
+      {studyDecks.length === 0 ? (
+        <div className="text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No study decks yet
+          </h3>
+          <p className="text-gray-500 mb-4">
+            Create your first study deck to get started!
+          </p>
           <Link
             to="/create"
-            className="text-apple-blue hover:underline"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Create your first study set
+            <Plus className="h-5 w-5 mr-2" />
+            Create Study Deck
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {decks.map((deck) => (
-            <StudySetCard
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {studyDecks.map((deck) => (
+            <Link
               key={deck.id}
-              id={deck.id}
-              title={deck.title}
-              description={deck.description}
-              subject={deck.subject}
-              flashcardCount={deck.flashcards?.length || 0}
-              quizCount={deck.quiz?.questions?.length || 0}
-              onClick={() => handleDeckClick(deck.id)}
-            />
+              to={`/study/${deck.id}`}
+              className="block bg-white overflow-hidden rounded-lg border border-gray-200 hover:border-blue-500 transition-colors duration-200"
+            >
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {deck.title}
+                </h3>
+                <p className="text-gray-500 text-sm mb-4">
+                  {deck.description || `A study deck about ${deck.subject}`}
+                </p>
+                <div className="flex items-center text-sm text-gray-500">
+                  <span className="mr-4">{deck.subject}</span>
+                  <span className="capitalize">{deck.difficulty}</span>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       )}

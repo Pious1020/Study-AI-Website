@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { getFirebaseDb } from '../lib/firebase';
 import { ArrowLeft, BookOpen, Brain } from 'lucide-react';
 
 interface StudyDeckData {
@@ -19,42 +19,40 @@ interface StudyDeckData {
 }
 
 export default function StudyDeck() {
-  const { deckId } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [deck, setDeck] = useState<StudyDeckData | null>(null);
+  const [studyDeck, setStudyDeck] = useState<StudyDeckData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadDeck() {
-      if (!deckId) {
-        setError('No deck ID provided');
+    async function fetchStudyDeck() {
+      if (!id) {
+        setError('No study deck ID provided');
         setLoading(false);
         return;
       }
 
       try {
-        const deckRef = doc(db, 'studyDecks', deckId);
-        const deckSnap = await getDoc(deckRef);
+        const db = getFirebaseDb();
+        const docRef = doc(db, 'studyDecks', id);
+        const docSnap = await getDoc(docRef);
 
-        if (!deckSnap.exists()) {
+        if (docSnap.exists()) {
+          setStudyDeck(docSnap.data() as StudyDeckData);
+        } else {
           setError('Study deck not found');
-          setLoading(false);
-          return;
         }
-
-        const deckData = deckSnap.data() as StudyDeckData;
-        setDeck(deckData);
       } catch (err) {
-        console.error('Error loading deck:', err);
+        console.error('Error fetching study deck:', err);
         setError('Failed to load study deck');
       } finally {
         setLoading(false);
       }
     }
 
-    loadDeck();
-  }, [deckId]);
+    fetchStudyDeck();
+  }, [id]);
 
   if (loading) {
     return (
@@ -66,14 +64,14 @@ export default function StudyDeck() {
     );
   }
 
-  if (error || !deck) {
+  if (error || !studyDeck) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <p className="text-red-500">{error || 'Failed to load study deck'}</p>
           <button
             onClick={() => navigate('/library')}
-            className="mt-4 text-apple-blue hover:underline"
+            className="mt-4 apple-button"
           >
             Return to Library
           </button>
@@ -92,10 +90,10 @@ export default function StudyDeck() {
         Back to Library
       </button>
 
-      <div className="bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-gray-900">{deck.title}</h1>
-        <p className="mt-2 text-gray-600">{deck.description}</p>
-        <p className="mt-1 text-sm text-gray-500">{deck.subject}</p>
+      <div className="apple-card">
+        <h1 className="apple-heading">{studyDeck.title}</h1>
+        <p className="mt-2 text-gray-600">{studyDeck.description}</p>
+        <p className="mt-1 text-sm text-gray-500">{studyDeck.subject}</p>
 
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-gray-50 rounded-lg p-6">
@@ -103,10 +101,10 @@ export default function StudyDeck() {
               <BookOpen className="w-6 h-6 text-apple-blue" />
               <h2 className="text-xl font-semibold">Flashcards</h2>
             </div>
-            <p className="text-gray-600">{deck.flashcards?.length || 0} cards available</p>
+            <p className="text-gray-600">{studyDeck.flashcards?.length || 0} cards available</p>
             <button
-              onClick={() => navigate(`/deck/${deckId}/flashcards`)}
-              className="mt-4 w-full bg-apple-blue text-white px-4 py-2 rounded-lg hover:bg-apple-blue/90 transition-colors"
+              onClick={() => navigate(`/deck/${id}/flashcards`)}
+              className="mt-4 apple-button"
             >
               Study Flashcards
             </button>
@@ -117,10 +115,10 @@ export default function StudyDeck() {
               <Brain className="w-6 h-6 text-apple-blue" />
               <h2 className="text-xl font-semibold">Quiz</h2>
             </div>
-            <p className="text-gray-600">{deck.quiz?.questions?.length || 0} questions available</p>
+            <p className="text-gray-600">{studyDeck.quiz?.questions?.length || 0} questions available</p>
             <button
-              onClick={() => navigate(`/deck/${deckId}/quiz`)}
-              className="mt-4 w-full bg-apple-blue text-white px-4 py-2 rounded-lg hover:bg-apple-blue/90 transition-colors"
+              onClick={() => navigate(`/deck/${id}/quiz`)}
+              className="mt-4 apple-button"
             >
               Take Quiz
             </button>
