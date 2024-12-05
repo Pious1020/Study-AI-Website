@@ -96,8 +96,9 @@ export const studyDeckService = {
   async deleteDeck(deckId: string) {
     try {
       const db = getFirebaseDb();
-      const docRef = doc(db, COLLECTION_NAME, deckId);
-      await deleteDoc(docRef);
+      const deckRef = doc(db, COLLECTION_NAME, deckId);
+      await deleteDoc(deckRef);
+      return true;
     } catch (error) {
       console.error('Error deleting deck:', error);
       throw error;

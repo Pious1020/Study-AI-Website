@@ -4,12 +4,14 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getFirebaseDb } from '../lib/firebase';
 import { useAuth } from '../providers/AuthProvider';
 import { StudySet } from '../types';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { studyDeckService } from '../services/studyDeck';
 
 export default function Library() {
   const [studyDecks, setStudyDecks] = useState<StudySet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { currentUser } = useAuth();
 
   useEffect(() => {
@@ -44,6 +46,26 @@ export default function Library() {
 
     fetchStudyDecks();
   }, [currentUser]);
+
+  const handleDelete = async (e: React.MouseEvent, deckId: string) => {
+    e.preventDefault(); // Prevent navigation
+    e.stopPropagation(); // Prevent event bubbling
+    
+    if (!window.confirm('Are you sure you want to delete this study deck? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setDeletingId(deckId);
+      await studyDeckService.deleteDeck(deckId);
+      setStudyDecks(prev => prev.filter(deck => deck.id !== deckId));
+    } catch (error) {
+      console.error('Error deleting study deck:', error);
+      setError('Failed to delete the study deck. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -99,12 +121,14 @@ export default function Library() {
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {studyDecks.map((deck) => (
-            <Link
+            <div
               key={deck.id}
-              to={`/study/${deck.id}`}
-              className="block bg-white overflow-hidden rounded-lg border border-gray-200 hover:border-blue-500 transition-colors duration-200"
+              className="relative group bg-white overflow-hidden rounded-lg border border-gray-200 hover:border-blue-500 transition-colors duration-200"
             >
-              <div className="p-6">
+              <Link
+                to={`/study/${deck.id}`}
+                className="block p-6"
+              >
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   {deck.title}
                 </h3>
@@ -115,8 +139,20 @@ export default function Library() {
                   <span className="mr-4">{deck.subject}</span>
                   <span className="capitalize">{deck.difficulty}</span>
                 </div>
-              </div>
-            </Link>
+              </Link>
+              <button
+                onClick={(e) => handleDelete(e, deck.id)}
+                disabled={deletingId === deck.id}
+                className="absolute top-2 right-2 p-2 rounded-full bg-white shadow-sm border border-gray-200 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:border-red-200 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                title="Delete study deck"
+              >
+                {deletingId === deck.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-red-500" />
+                ) : (
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                )}
+              </button>
+            </div>
           ))}
         </div>
       )}
