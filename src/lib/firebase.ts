@@ -12,7 +12,7 @@ export function initializeFirebase() {
   } catch {
     firebaseApp = initializeApp({
       apiKey: "AIzaSyBX_9U8UivS3qXrOBKXT2yuEs9Us99DoqM",
-      authDomain: "study-ai-d873d.firebaseapp.com",
+      authDomain: "study-ai.live",
       projectId: "study-ai-d873d",
       storageBucket: "study-ai-d873d.firebasestorage.app",
       messagingSenderId: "1045128936057",
